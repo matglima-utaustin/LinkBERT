@@ -173,13 +173,23 @@ def main():
     label_to_id = {"yes": 1, "no": 0, "maybe": 2}
     num_labels = len(label_to_id)
 
-    def convert_labels(examples):        
-        # Create a mapping for truncated labels
-        truncated_label_to_id = {"y": 1, "n": 0, "m": 2}
+    def convert_labels(examples):
+        unique_labels = set(examples["label"])
+        print("Unique labels in dataset:", unique_labels)
         
-        examples["label"] = [truncated_label_to_id.get(label[0].lower(), -1) for label in examples["label"]]
-        if -1 in examples["label"]:
-            print("Warning: Unknown labels found in the dataset")
+        unknown_labels = set()
+        converted_labels = []
+        for label in examples["label"]:
+            if label not in label_to_id:
+                unknown_labels.add(label)
+                converted_labels.append(-1)
+            else:
+                converted_labels.append(label_to_id[label])
+        
+        if unknown_labels:
+            print(f"Warning: Unknown labels found in the dataset: {unknown_labels}")
+        
+        examples["label"] = converted_labels
         return examples
 
     raw_datasets = raw_datasets.map(
