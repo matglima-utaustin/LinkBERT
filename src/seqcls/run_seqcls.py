@@ -59,6 +59,21 @@ class DataTrainingArguments:
     metric_name: Optional[str] = field(
         default=None, metadata={"help": "The metric to use for evaluation."}
     )
+    pad_to_max_length: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to pad all samples to `max_seq_length`. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False, 
+        metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
 
 @dataclass
 class ModelArguments:
