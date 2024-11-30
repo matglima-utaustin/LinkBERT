@@ -126,26 +126,35 @@ def main():
     set_seed(training_args.seed)
 
     # Load datasets
-    data_files = {
-        "train": data_args.train_file,
-        "validation": data_args.validation_file,
-        "test": data_args.test_file
-    }
-    
     raw_datasets = load_dataset(
         "json",
         data_files=data_files,
         cache_dir=model_args.cache_dir,
     )
 
-    # Load pretrained model and tokenizer
+    # Inspect dataset structure
+    logger.info(f"Dataset structure: {raw_datasets['train'].features}")
+    logger.info(f"Sample example: {raw_datasets['train'][0]}")
+
+    # Determine number of labels
+    if "label" in raw_datasets["train"].features:
+        if isinstance(raw_datasets["train"].features["label"], datasets.ClassLabel):
+            num_labels = raw_datasets["train"].features["label"].num_classes
+        else:
+            # Count unique labels
+            labels = set()
+            for split in raw_datasets.values():
+                labels.update(split["label"])
+            num_labels = len(labels)
+    else:
+        raise ValueError("Dataset must contain a 'label' column")
+
+    # Load config with correct number of labels
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-        num_labels=2,  # Update based on your task
+        model_args.model_name_or_path,
+        num_labels=num_labels,
         finetuning_task="sequence-classification",
         cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=model_args.use_auth_token if model_args.use_auth_token else None,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -173,19 +182,34 @@ def main():
     max_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def preprocess_function(examples):
-        # Handle single and paired sequences
-        texts = (examples['text'] if 'text' in examples 
-                else (examples['sentence1'], examples['sentence2']) if 'sentence2' in examples 
-                else examples['sentence1'])
-        
-        # Using modern tokenizer features
-        return tokenizer(
+        # First, let's examine the structure of our input data
+        if "text" in examples:
+            texts = examples["text"]
+        elif "sentence1" in examples and "sentence2" in examples:
+            texts = (examples["sentence1"], examples["sentence2"])
+        elif "question" in examples and "context" in examples:
+            texts = (examples["question"], examples["context"])
+        elif "abstract" in examples:  # For PubMedQA
+            texts = examples["abstract"]
+        else:
+            raise ValueError(f"Unexpected input format. Available keys: {examples.keys()}")
+    
+        # Tokenize the texts
+        result = tokenizer(
             texts,
             padding=padding,
             max_length=max_length,
             truncation=True,
-            return_tensors=None,  # Return PyTorch tensors
+            return_tensors=None,
         )
+    
+        if "label" in examples:
+            if isinstance(examples["label"], list):
+                result["label"] = examples["label"]
+            else:
+                result["label"] = [l for l in examples["label"]]
+    
+        return result
 
     # Process datasets using modern mapping
     with training_args.main_process_first(desc="Dataset preprocessing"):
