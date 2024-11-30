@@ -170,21 +170,24 @@ def main():
     )
 
     # Convert labels to integers
-    label_to_id = {"yes": 1, "no": 0, "maybe": 2}
+    label_to_id = {"y": 1, "n": 0, "m": 2}
     num_labels = len(label_to_id)
 
     def convert_labels(examples):
         unique_labels = set(examples["label"])
         print("Unique labels in dataset:", unique_labels)
         
+        label_mapping = {"y": "y", "n": "n", "m": "m", "s": "y", "e": "y"}
+        
         unknown_labels = set()
         converted_labels = []
         for label in examples["label"]:
-            if label not in label_to_id:
+            mapped_label = label_mapping.get(label.lower())
+            if mapped_label is None:
                 unknown_labels.add(label)
                 converted_labels.append(-1)
             else:
-                converted_labels.append(label_to_id[label])
+                converted_labels.append(label_to_id[mapped_label])
         
         if unknown_labels:
             print(f"Warning: Unknown labels found in the dataset: {unknown_labels}")
