@@ -21,6 +21,7 @@ from transformers import (
     PretrainedConfig,
     Trainer,
     TrainingArguments,
+    HfArgumentParser,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
