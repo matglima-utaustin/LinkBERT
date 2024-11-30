@@ -173,14 +173,14 @@ def main():
     )
 
     # Convert labels to integers
-    label_to_id = {"y": 1, "n": 0, "m": 2}
+    label_to_id = {"yes": 0, "no": 1, "maybe": 2}
     num_labels = len(label_to_id)
 
     def convert_labels(examples):
         unique_labels = set(examples["label"])
         print("Unique labels in dataset:", unique_labels)
         
-        label_mapping = {"y": "y", "n": "n", "m": "m", "s": "y", "e": "y"}
+        label_mapping = {"yes": "yes", "no": "no", "maybe": "maybe"}
         
         unknown_labels = set()
         converted_labels = []
@@ -233,6 +233,7 @@ def main():
             text_pair=examples["sentence2"],
             padding=False,
             truncation=True,
+            max_length=data_args.max_seq_length,
             return_attention_mask=True,
             return_token_type_ids=True,
             return_tensors=None,
@@ -247,17 +248,6 @@ def main():
             desc="Running tokenizer on dataset",
             num_proc=data_args.preprocessing_num_workers,
         )
-
-    # Flatten labels if necessary
-    def flatten_labels(examples):
-        examples['label'] = [label[0] if isinstance(label, list) else label for label in examples['label']]
-        return examples
-
-    processed_datasets = processed_datasets.map(
-        flatten_labels,
-        batched=True,
-        desc="Flattening labels",
-    )
 
     # Prepare datasets for training, validation, and testing
     if training_args.do_train:
@@ -312,7 +302,6 @@ def main():
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer=tokenizer, padding=True),
-        label_names=["labels"],
     )
 
     # Training
