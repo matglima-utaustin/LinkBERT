@@ -111,9 +111,13 @@ class ModelArguments:
     )
 
 def main():
-    # Setup argument parser with modern defaults
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+    else:
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Setup logging
     logging.basicConfig(
@@ -123,38 +127,41 @@ def main():
     )
     logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
-    # Set seed for reproducibility
-    set_seed(training_args.seed)
+    # Log on each process the small summary:
+    logger.warning(
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+    )
+    logger.info(f"Training/evaluation parameters {training_args}")
+
+    # Load datasets
     data_files = {
         "train": data_args.train_file,
         "validation": data_args.validation_file,
-        "test": data_args.test_file
     }
-    # Load datasets
+    if data_args.test_file is not None:
+        data_files["test"] = data_args.test_file
+
     raw_datasets = load_dataset(
         "json",
         data_files=data_files,
         cache_dir=model_args.cache_dir,
     )
 
-    # Inspect dataset structure
-    logger.info(f"Dataset structure: {raw_datasets['train'].features}")
-    logger.info(f"Sample example: {raw_datasets['train'][0]}")
+    # Convert labels to integers
+    label_to_id = {"yes": 1, "no": 0, "maybe": 2}
+    num_labels = len(label_to_id)
 
-    # Determine number of labels
-    if "label" in raw_datasets["train"].features:
-        if isinstance(raw_datasets["train"].features["label"], datasets.ClassLabel):
-            num_labels = raw_datasets["train"].features["label"].num_classes
-        else:
-            # Count unique labels
-            labels = set()
-            for split in raw_datasets.values():
-                labels.update(split["label"])
-            num_labels = len(labels)
-    else:
-        raise ValueError("Dataset must contain a 'label' column")
+    def convert_labels(examples):
+        examples["label"] = [label_to_id[label] for label in examples["label"]]
+        return examples
 
-    # Load config with correct number of labels
+    raw_datasets = raw_datasets.map(
+        convert_labels,
+        desc="Converting labels to ids",
+    )
+
+    # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
         model_args.model_name_or_path,
         num_labels=num_labels,
@@ -163,101 +170,84 @@ def main():
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
-        revision=model_args.model_revision,
-        use_auth_token=model_args.use_auth_token if model_args.use_auth_token else None,
+        use_fast=True,
     )
 
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=model_args.use_auth_token if model_args.use_auth_token else None,
     )
-
-    # Enable gradient checkpointing for memory efficiency
-    if training_args.gradient_checkpointing:
-        model.gradient_checkpointing_enable()
 
     # Preprocessing the datasets
     padding = "max_length" if data_args.pad_to_max_length else False
     max_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def preprocess_function(examples):
-        # First, let's examine the structure of our input data
-        if "text" in examples:
-            texts = examples["text"]
-        elif "sentence1" in examples and "sentence2" in examples:
-            texts = (examples["sentence1"], examples["sentence2"])
-        elif "question" in examples and "context" in examples:
-            texts = (examples["question"], examples["context"])
-        elif "abstract" in examples:  # For PubMedQA
-            texts = examples["abstract"]
-        else:
-            raise ValueError(f"Unexpected input format. Available keys: {examples.keys()}")
-    
-        # Tokenize the texts
-        result = tokenizer(
-            texts,
+        return tokenizer(
+            text=examples["sentence1"],
+            text_pair=examples["sentence2"],
             padding=padding,
             max_length=max_length,
             truncation=True,
             return_tensors=None,
         )
-    
-        if "label" in examples:
-            if isinstance(examples["label"], list):
-                result["label"] = examples["label"]
-            else:
-                result["label"] = [l for l in examples["label"]]
-    
-        return result
 
-    # Process datasets using modern mapping
+    # Process the datasets
     with training_args.main_process_first(desc="Dataset preprocessing"):
         processed_datasets = raw_datasets.map(
             preprocess_function,
             batched=True,
-            num_proc=training_args.dataloader_num_workers,
             remove_columns=raw_datasets["train"].column_names,
             desc="Running tokenizer on dataset",
+            num_proc=data_args.preprocessing_num_workers,
         )
-
+    train_dataset = processed_datasets
+    
+    # Prepare datasets for training, validation, and testing
     if training_args.do_train:
+        if "train" not in processed_datasets:
+            raise ValueError("--do_train requires a train dataset")
         train_dataset = processed_datasets["train"]
-        if data_args.max_train_samples:
+        if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     if training_args.do_eval:
+        if "validation" not in processed_datasets:
+            raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = processed_datasets["validation"]
-        if data_args.max_eval_samples:
+        if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
     if training_args.do_predict:
+        if "test" not in processed_datasets:
+            raise ValueError("--do_predict requires a test dataset")
         predict_dataset = processed_datasets["test"]
-        if data_args.max_predict_samples:
+        if data_args.max_predict_samples is not None:
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
 
-    # Modern metric computation using evaluate library
+    # Define compute_metrics function
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
-        if data_args.metric_name == "accuracy":
-            metric = evaluate.load("accuracy")
-            return metric.compute(predictions=np.argmax(predictions, axis=1), references=labels)
-        elif data_args.metric_name == "f1":
-            metric = evaluate.load("f1")
-            return metric.compute(predictions=np.argmax(predictions, axis=1), references=labels, average="weighted")
-        elif data_args.metric_name == "pearsonr":
-            return {
-                "pearsonr": float(np.corrcoef(predictions.squeeze(), labels)[0, 1])
-            }
-        else:
-            raise ValueError(f"Metric {data_args.metric_name} not supported")
+        predictions = np.argmax(predictions, axis=1)
+        
+        # Calculate accuracy
+        accuracy = (predictions == labels).mean()
+        
+        # Calculate precision, recall, and F1 for each class
+        from sklearn.metrics import precision_recall_fscore_support
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average='weighted')
+        
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        }
 
-    # Initialize trainer with modern features
+    # Initialize our Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -265,24 +255,19 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
-        data_collator=DataCollatorWithPadding(
-            tokenizer=tokenizer,
-            padding="max_length" if data_args.pad_to_max_length else "longest",
-            max_length=max_length,
-        ),
-        callbacks=[TensorBoardCallback()],
+        data_collator=DataCollatorWithPadding(tokenizer=tokenizer, padding=padding),
     )
 
     # Training
     if training_args.do_train:
         checkpoint = None
-        if training_args.resume_from_checkpoint:
+        if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
         
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        # Save training metrics
         metrics = train_result.metrics
-        trainer.save_model()
+        trainer.save_model()  # Saves the tokenizer too for easy upload
+
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
         trainer.save_state()
@@ -302,7 +287,6 @@ def main():
         # Save predictions
         output_predict_file = os.path.join(training_args.output_dir, "predictions.json")
         if trainer.is_world_process_zero():
-            import json
             with open(output_predict_file, "w") as f:
                 json.dump({
                     "predictions": predictions.predictions.tolist(),
@@ -310,12 +294,10 @@ def main():
                     "metrics": predictions.metrics
                 }, f)
 
-    # Push to Hub if specified
+    # Push to hub if specified
     if training_args.push_to_hub:
-        trainer.push_to_hub(
-            commit_message="End of training",
-            tags=["sequence-classification", data_args.metric_name],
-        )
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
+        trainer.push_to_hub(**kwargs)
 
 if __name__ == "__main__":
     main()
