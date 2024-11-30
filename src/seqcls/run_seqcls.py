@@ -109,7 +109,7 @@ def main():
         num_labels=2,  # Update based on your task
         finetuning_task="sequence-classification",
     )
-        tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         use_fast=True,
     )
