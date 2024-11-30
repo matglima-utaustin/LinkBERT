@@ -1,179 +1,247 @@
-# run_seqcls.py
+#!/usr/bin/env python
+# coding=utf-8
 
-from transformers import (
-    HfArgumentParser,
-    AutoConfig,
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    SeqClsTrainer,  # Assuming custom trainer is imported
-    TrainingArguments,
-    DataCollatorWithPadding,
-)
-from datasets import load_dataset, load_metric
 import logging
 import os
+import random
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+
 import numpy as np
+import evaluate
+from datasets import load_dataset
+import torch
+
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    PretrainedConfig,
+    Trainer,
+    TrainingArguments,
+    set_seed,
+)
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.integrations import TensorBoardCallback
+
+# Update minimum version requirement
+check_min_version("4.31.0")
 
 logger = logging.getLogger(__name__)
 
 @dataclass
-class ModelArguments:
-    model_name_or_path: str = field(metadata={"help": "Path to pretrained model or model identifier"})
-    cache_dir: Optional[str] = field(default=None, metadata={"help": "Cache directory"})
-    use_auth_token: bool = field(default=False, metadata={"help": "Use authentication token"})
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+    """
+    dataset_name: Optional[str] = field(
+        default=None, metadata={"help": "The name of the dataset to use."}
+    )
+    max_seq_length: int = field(
+        default=512,
+        metadata={
+            "help": "Maximum sequence length. Sequences will be truncated/padded to this length."
+        },
+    )
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "A json file containing the training data."}
+    )
+    validation_file: Optional[str] = field(
+        default=None, metadata={"help": "A json file containing the validation data."}
+    )
+    test_file: Optional[str] = field(
+        default=None, metadata={"help": "A json file containing the test data."}
+    )
+    metric_name: Optional[str] = field(
+        default=None, metadata={"help": "The metric to use for evaluation."}
+    )
 
 @dataclass
-class DataTrainingArguments:
-    task_name: Optional[str] = field(default=None, metadata={"help": "Task name"})
-    dataset_name: Optional[str] = field(default=None, metadata={"help": "Dataset name"})
-    dataset_config_name: Optional[str] = field(default=None, metadata={"help": "Dataset config name"})
-    max_seq_length: int = field(default=128, metadata={"help": "Maximum sequence length"})
-    overwrite_cache: bool = field(default=False, metadata={"help": "Overwrite cache"})
-    pad_to_max_length: bool = field(default=True, metadata={"help": "Pad to max length"})
-    max_train_samples: Optional[int] = field(default=None, metadata={"help": "Maximum train samples"})
-    max_eval_samples: Optional[int] = field(default=None, metadata={"help": "Maximum eval samples"})
-    max_predict_samples: Optional[int] = field(default=None, metadata={"help": "Maximum predict samples"})
-    train_file: Optional[str] = field(default=None, metadata={"help": "Train file"})
-    validation_file: Optional[str] = field(default=None, metadata={"help": "Validation file"})
-    test_file: Optional[str] = field(default=None, metadata={"help": "Test file"})
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune.
+    """
+    model_name_or_path: str = field(
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    )
+    config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path"}
+    )
+    tokenizer_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained tokenizer name or path"}
+    )
 
 def main():
+    # Setup argument parser with modern defaults
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
-    if data_args.task_name is not None:
-        raw_datasets = load_dataset("glue", data_args.task_name, cache_dir=model_args.cache_dir)
-    elif data_args.dataset_name is not None:
-        raw_datasets = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            cache_dir=model_args.cache_dir,
-        )
-    else:
-        data_files = {}
-        if data_args.train_file is not None:
-            data_files["train"] = data_args.train_file
-        if data_args.validation_file is not None:
-            data_files["validation"] = data_args.validation_file
-        if data_args.test_file is not None:
-            data_files["test"] = data_args.test_file
-        extension = data_args.train_file.split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+    # Set seed for reproducibility
+    set_seed(training_args.seed)
 
-    if data_args.task_name is not None:
-        is_regression = data_args.task_name == "stsb"
-        if not is_regression:
-            label_list = raw_datasets["train"].features["label"].names
-            num_labels = len(label_list)
-        else:
-            num_labels = 1
-    else:
-        is_regression = raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
-        if not is_regression:
-            label_list = raw_datasets["train"].unique("label")
-            label_list.sort()
-            num_labels = len(label_list)
+    # Load datasets
+    data_files = {
+        "train": data_args.train_file,
+        "validation": data_args.validation_file,
+        "test": data_args.test_file
+    }
+    
+    raw_datasets = load_dataset(
+        "json",
+        data_files=data_files,
+        cache_dir=model_args.cache_dir,
+    )
 
+    # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
         model_args.model_name_or_path,
-        num_labels=num_labels,
-        cache_dir=model_args.cache_dir,
+        num_labels=2,  # Update based on your task
+        finetuning_task="sequence-classification",
     )
-    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
         use_fast=True,
     )
+
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
-        cache_dir=model_args.cache_dir,
     )
 
+    # Enable gradient checkpointing for memory efficiency
+    if training_args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+
+    # Preprocessing the datasets
     padding = "max_length" if data_args.pad_to_max_length else False
-    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+    max_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def preprocess_function(examples):
-        args = (examples["sentence"],) if "sentence2" not in examples else (examples["sentence1"], examples["sentence2"])
-        result = tokenizer(
-            *args,
+        # Handle single and paired sequences
+        texts = (examples['text'] if 'text' in examples 
+                else (examples['sentence1'], examples['sentence2']) if 'sentence2' in examples 
+                else examples['sentence1'])
+        
+        # Using modern tokenizer features
+        return tokenizer(
+            texts,
             padding=padding,
-            max_length=max_seq_length,
+            max_length=max_length,
             truncation=True,
+            return_tensors=None,  # Return PyTorch tensors
         )
-        if "label" in examples:
-            result["label"] = examples["label"]
-        return result
 
-    raw_datasets = raw_datasets.map(
-        preprocess_function,
-        batched=True,
-        load_from_cache_file=not data_args.overwrite_cache,
-    )
+    # Process datasets using modern mapping
+    with training_args.main_process_first(desc="Dataset preprocessing"):
+        processed_datasets = raw_datasets.map(
+            preprocess_function,
+            batched=True,
+            num_proc=training_args.dataloader_num_workers,
+            remove_columns=raw_datasets["train"].column_names,
+            desc="Running tokenizer on dataset",
+        )
 
     if training_args.do_train:
-        train_dataset = raw_datasets["train"]
-        if data_args.max_train_samples is not None:
+        train_dataset = processed_datasets["train"]
+        if data_args.max_train_samples:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     if training_args.do_eval:
-        eval_dataset = raw_datasets["validation"]
-        if data_args.max_eval_samples is not None:
+        eval_dataset = processed_datasets["validation"]
+        if data_args.max_eval_samples:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
     if training_args.do_predict:
-        predict_dataset = raw_datasets["test"]
-        if data_args.max_predict_samples is not None:
+        predict_dataset = processed_datasets["test"]
+        if data_args.max_predict_samples:
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
 
-    def compute_metrics(p: EvalPrediction):
-        if data_args.task_name is not None:
-            metric = load_metric("glue", data_args.task_name)
-            return metric.compute(predictions=p.predictions, references=p.label_ids)
+    # Modern metric computation using evaluate library
+    def compute_metrics(eval_pred):
+        predictions, labels = eval_pred
+        if data_args.metric_name == "accuracy":
+            metric = evaluate.load("accuracy")
+            return metric.compute(predictions=np.argmax(predictions, axis=1), references=labels)
+        elif data_args.metric_name == "f1":
+            metric = evaluate.load("f1")
+            return metric.compute(predictions=np.argmax(predictions, axis=1), references=labels, average="weighted")
+        elif data_args.metric_name == "pearsonr":
+            return {
+                "pearsonr": float(np.corrcoef(predictions.squeeze(), labels)[0, 1])
+            }
         else:
-            metric = load_metric("accuracy")
-            return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
+            raise ValueError(f"Metric {data_args.metric_name} not supported")
 
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-    trainer = SeqClsTrainer(
+    # Initialize trainer with modern features
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
-        data_collator=data_collator,
+        data_collator=DataCollatorWithPadding(
+            tokenizer=tokenizer,
+            padding="max_length" if data_args.pad_to_max_length else "longest",
+            max_length=max_length,
+        ),
+        callbacks=[TensorBoardCallback()],
     )
 
+    # Training
     if training_args.do_train:
-        trainer.train()
+        checkpoint = None
+        if training_args.resume_from_checkpoint:
+            checkpoint = training_args.resume_from_checkpoint
+        
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        # Save training metrics
+        metrics = train_result.metrics
         trainer.save_model()
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
         trainer.save_state()
 
+    # Evaluation
     if training_args.do_eval:
+        logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # Prediction
     if training_args.do_predict:
-        predictions = trainer.predict(predict_dataset).predictions
-        if is_regression:
-            predictions = np.squeeze(predictions)
-        else:
-            predictions = np.argmax(predictions, axis=1)
-        output_predict_file = os.path.join(training_args.output_dir, "predictions.txt")
-        with open(output_predict_file, "w") as writer:
-            writer.write("\n".join(str(pred) for pred in predictions))
+        logger.info("*** Predict ***")
+        predictions = trainer.predict(predict_dataset)
+        
+        # Save predictions
+        output_predict_file = os.path.join(training_args.output_dir, "predictions.json")
+        if trainer.is_world_process_zero():
+            import json
+            with open(output_predict_file, "w") as f:
+                json.dump({
+                    "predictions": predictions.predictions.tolist(),
+                    "label_ids": predictions.label_ids.tolist(),
+                    "metrics": predictions.metrics
+                }, f)
+
+    # Push to Hub if specified
+    if training_args.push_to_hub:
+        trainer.push_to_hub(
+            commit_message="End of training",
+            tags=["sequence-classification", data_args.metric_name],
+        )
 
 if __name__ == "__main__":
     main()
