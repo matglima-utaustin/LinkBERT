@@ -75,6 +75,27 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        },
+    )
+    max_predict_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+            "value if set."
+        },
+    )
 
 @dataclass
 class ModelArguments:
@@ -148,16 +169,11 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
-    print("Sample data:")
-    print(raw_datasets["train"][:5])
     # Convert labels to integers
     label_to_id = {"yes": 1, "no": 0, "maybe": 2}
     num_labels = len(label_to_id)
 
-    def convert_labels(examples):
-        unique_labels = set(examples["label"])
-        print("Unique labels in dataset:", unique_labels)
-        
+    def convert_labels(examples):        
         # Create a mapping for truncated labels
         truncated_label_to_id = {"y": 1, "n": 0, "m": 2}
         
@@ -222,21 +238,24 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = processed_datasets["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
-
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
+    
     if training_args.do_eval:
         if "validation" not in processed_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = processed_datasets["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
-
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
+    
     if training_args.do_predict:
         if "test" not in processed_datasets:
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = processed_datasets["test"]
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
 
     # Define compute_metrics function
     def compute_metrics(eval_pred):
