@@ -153,6 +153,8 @@ def main():
     num_labels = len(label_to_id)
 
     def convert_labels(examples):
+        unique_labels = set(examples["label"])
+        print("Unique labels in dataset:", unique_labels)
         examples["label"] = [label_to_id[label] for label in examples["label"]]
         return examples
 
