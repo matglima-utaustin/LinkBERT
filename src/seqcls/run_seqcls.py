@@ -157,7 +157,13 @@ def main():
     def convert_labels(examples):
         unique_labels = set(examples["label"])
         print("Unique labels in dataset:", unique_labels)
-        examples["label"] = [label_to_id[label] for label in examples["label"]]
+        
+        # Create a mapping for truncated labels
+        truncated_label_to_id = {"y": 1, "n": 0, "m": 2}
+        
+        examples["label"] = [truncated_label_to_id.get(label[0].lower(), -1) for label in examples["label"]]
+        if -1 in examples["label"]:
+            print("Warning: Unknown labels found in the dataset")
         return examples
 
     raw_datasets = raw_datasets.map(
