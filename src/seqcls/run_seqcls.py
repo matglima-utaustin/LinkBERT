@@ -74,6 +74,25 @@ class ModelArguments:
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path"}
     )
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+            "with private models)."
+        },
+    )
+    use_fast_tokenizer: bool = field(
+        default=True,
+        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
 
 def main():
     # Setup argument parser with modern defaults
@@ -106,18 +125,28 @@ def main():
 
     # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path,
+        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=2,  # Update based on your task
         finetuning_task="sequence-classification",
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=model_args.use_auth_token if model_args.use_auth_token else None,
     )
+
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
-        use_fast=True,
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        use_fast=model_args.use_fast_tokenizer,
+        revision=model_args.model_revision,
+        use_auth_token=model_args.use_auth_token if model_args.use_auth_token else None,
     )
 
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=model_args.use_auth_token if model_args.use_auth_token else None,
     )
 
     # Enable gradient checkpointing for memory efficiency
