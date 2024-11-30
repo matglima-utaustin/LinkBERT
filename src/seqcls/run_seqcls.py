@@ -239,11 +239,10 @@ def main():
         processed_datasets = raw_datasets.map(
             preprocess_function,
             batched=True,
-            remove_columns=raw_datasets["train"].column_names,
+            remove_columns=[col for col in raw_datasets["train"].column_names if col != "label"],
             desc="Running tokenizer on dataset",
             num_proc=data_args.preprocessing_num_workers,
         )
-    train_dataset = processed_datasets
     
     # Prepare datasets for training, validation, and testing
     if training_args.do_train:
@@ -266,10 +265,9 @@ def main():
         if "test" not in processed_datasets:
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = processed_datasets["test"]
-        if data_args.max_predict_samples is not None:
-            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
-            predict_dataset = predict_dataset.select(range(max_predict_samples))
-
+    if data_args.max_predict_samples is not None:
+        max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+        predict_dataset = predict_dataset.select(range(max_predict_samples))
     # Define compute_metrics function
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
