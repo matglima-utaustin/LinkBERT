@@ -124,7 +124,11 @@ def main():
 
     # Set seed for reproducibility
     set_seed(training_args.seed)
-
+    data_files = {
+        "train": data_args.train_file,
+        "validation": data_args.validation_file,
+        "test": data_args.test_file
+    }
     # Load datasets
     raw_datasets = load_dataset(
         "json",
