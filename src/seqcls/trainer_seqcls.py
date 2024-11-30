@@ -14,76 +14,58 @@
 # limitations under the License.
 """
 A subclass of `Trainer` specific to Question-Answering tasks
+Customized Trainer for Sequence Classification tasks.
+Streamlined for compatibility with updated libraries and necessary functionality.
 """
 
-from transformers import Trainer, is_torch_tpu_available
+from transformers import Trainer
 from transformers.trainer_utils import PredictionOutput
 
-
-if is_torch_tpu_available():
-    import torch_xla.core.xla_model as xm
-    import torch_xla.debug.metrics as met
-
-
 class SeqClsTrainer(Trainer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    """
+    Custom Trainer for sequence classification tasks, modified for metric computation and compatibility.
+    """
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix: str = "eval"):
         eval_dataset = self.eval_dataset if eval_dataset is None else eval_dataset
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
-        # Temporarily disable metric computation, we will do it in the loop here.
+        # Temporarily disable metrics computation during the loop
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
-        eval_loop = self.evaluation_loop
-        output = eval_loop(
-                eval_dataloader,
-                description="Evaluation",
-                prediction_loss_only=None,
-                ignore_keys=ignore_keys,
+
+        output = self.evaluation_loop(
+            eval_dataloader,
+            description="Evaluation",
+            ignore_keys=ignore_keys,
         )
-        # self.label_names = label_names
+
         self.compute_metrics = compute_metrics
 
-        # metrics = output.metrics
-        metrics = self.compute_metrics(output, eval_dataset)
-
-        # Prefix all keys with metric_key_prefix + '_'
-        for key in list(metrics.keys()):
-            if not key.startswith(f"{metric_key_prefix}_"):
-                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
+        # Compute metrics if a function is provided
+        metrics = compute_metrics(output, eval_dataset) if compute_metrics else {}
+        metrics = {f"{metric_key_prefix}_{k}": v for k, v in metrics.items()}  # Add prefix to metric keys
 
         self.log(metrics)
-
-        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
         return metrics
 
     def predict(self, predict_dataset, ignore_keys=None, metric_key_prefix: str = "test"):
         predict_dataloader = self.get_test_dataloader(predict_dataset)
 
-        # Temporarily disable metric computation, we will do it in the loop here.
+        # Temporarily disable metrics computation during the loop
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
-        eval_loop = self.evaluation_loop
-        output = eval_loop(
+
+        output = self.evaluation_loop(
             predict_dataloader,
             description="Prediction",
-            prediction_loss_only=None,
             ignore_keys=ignore_keys,
         )
 
-        # self.label_names = label_names
         self.compute_metrics = compute_metrics
 
-        # metrics = output.metrics
-        metrics = self.compute_metrics(output, predict_dataset)
+        # Compute metrics if a function is provided
+        metrics = compute_metrics(output, predict_dataset) if compute_metrics else {}
+        metrics = {f"{metric_key_prefix}_{k}": v for k, v in metrics.items()}  # Add prefix to metric keys
 
-        # Prefix all keys with metric_key_prefix + '_'
-        for key in list(metrics.keys()):
-            if not key.startswith(f"{metric_key_prefix}_"):
-                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
-
-        self.log(metrics) #Added
-
+        self.log(metrics)
         return PredictionOutput(predictions=output.predictions, label_ids=output.label_ids, metrics=metrics)
