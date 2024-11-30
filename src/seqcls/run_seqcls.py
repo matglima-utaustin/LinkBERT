@@ -148,6 +148,8 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
+    print("Sample data:")
+    print(raw_datasets["train"][:5])
     # Convert labels to integers
     label_to_id = {"yes": 1, "no": 0, "maybe": 2}
     num_labels = len(label_to_id)
