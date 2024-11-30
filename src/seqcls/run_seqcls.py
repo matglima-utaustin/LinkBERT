@@ -201,6 +201,7 @@ def main():
     raw_datasets = raw_datasets.map(
         convert_labels,
         desc="Converting labels to ids",
+        batched=False,
     )
 
     # Load pretrained model and tokenizer
@@ -232,6 +233,8 @@ def main():
             text_pair=examples["sentence2"],
             padding=False,
             truncation=True,
+            return_attention_mask=True,
+            return_token_type_ids=True,
             return_tensors=None,
         )
 
@@ -244,6 +247,17 @@ def main():
             desc="Running tokenizer on dataset",
             num_proc=data_args.preprocessing_num_workers,
         )
+
+    # Flatten labels if necessary
+    def flatten_labels(examples):
+        examples['label'] = [label[0] if isinstance(label, list) else label for label in examples['label']]
+        return examples
+
+    processed_datasets = processed_datasets.map(
+        flatten_labels,
+        batched=True,
+        desc="Flattening labels",
+    )
 
     # Prepare datasets for training, validation, and testing
     if training_args.do_train:
@@ -298,6 +312,7 @@ def main():
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer=tokenizer, padding=True),
+        label_names=["labels"],
     )
 
     # Training
