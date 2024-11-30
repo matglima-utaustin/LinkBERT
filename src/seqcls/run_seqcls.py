@@ -34,6 +34,9 @@ check_min_version("4.31.0")
 
 logger = logging.getLogger(__name__)
 
+# Set environment variable to avoid warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 @dataclass
 class DataTrainingArguments:
     """
@@ -61,7 +64,7 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The metric to use for evaluation."}
     )
     pad_to_max_length: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
@@ -221,15 +224,13 @@ def main():
     )
 
     # Preprocessing the datasets
-    padding = "max_length" if data_args.pad_to_max_length else False
     max_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def preprocess_function(examples):
         return tokenizer(
             text=examples["sentence1"],
             text_pair=examples["sentence2"],
-            padding=padding,
-            max_length=max_length,
+            padding=False,
             truncation=True,
             return_tensors=None,
         )
@@ -243,7 +244,7 @@ def main():
             desc="Running tokenizer on dataset",
             num_proc=data_args.preprocessing_num_workers,
         )
-    
+
     # Prepare datasets for training, validation, and testing
     if training_args.do_train:
         if "train" not in processed_datasets:
@@ -252,7 +253,7 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
-    
+
     if training_args.do_eval:
         if "validation" not in processed_datasets:
             raise ValueError("--do_eval requires a validation dataset")
@@ -260,14 +261,15 @@ def main():
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
-    
+
     if training_args.do_predict:
         if "test" not in processed_datasets:
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = processed_datasets["test"]
-    if data_args.max_predict_samples is not None:
-        max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
-        predict_dataset = predict_dataset.select(range(max_predict_samples))
+        if data_args.max_predict_samples is not None:
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
+
     # Define compute_metrics function
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
@@ -295,7 +297,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
-        data_collator=DataCollatorWithPadding(tokenizer=tokenizer, padding=padding),
+        data_collator=DataCollatorWithPadding(tokenizer=tokenizer, padding=True),
     )
 
     # Training
