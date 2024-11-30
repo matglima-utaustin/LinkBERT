@@ -11,7 +11,7 @@ from typing import Optional
 import numpy as np
 import evaluate
 import datasets
-from datasets import load_dataset
+from datasets import Dataset, DatasetDict
 import torch
 
 from transformers import (
@@ -158,7 +158,7 @@ def main():
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # Load datasets
+    # Load datasets separately for train, validation, and test
     data_files = {
         "train": data_args.train_file,
         "validation": data_args.validation_file,
@@ -166,11 +166,16 @@ def main():
     if data_args.test_file is not None:
         data_files["test"] = data_args.test_file
 
-    raw_datasets = load_dataset(
-        "json",
-        data_files=data_files,
-        cache_dir=model_args.cache_dir,
-    )
+    # Load each split as a separate Dataset
+    datasets_dict = {}
+    for split, file_path in data_files.items():
+        datasets_dict[split] = Dataset.from_json(file_path)
+
+    # Create a DatasetDict
+    raw_datasets = DatasetDict(datasets_dict)
+
+    # Verify the dataset structure
+    print(raw_datasets)
 
     # Convert labels to integers
     label_to_id = {"yes": 0, "no": 1, "maybe": 2}
@@ -200,8 +205,8 @@ def main():
 
     raw_datasets = raw_datasets.map(
         convert_labels,
-        desc="Converting labels to ids",
         batched=False,
+        desc="Converting labels to ids",
     )
 
     # Load pretrained model and tokenizer
