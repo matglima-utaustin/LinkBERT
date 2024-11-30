@@ -10,6 +10,7 @@ from typing import Optional
 
 import numpy as np
 import evaluate
+import datasets
 from datasets import load_dataset
 import torch
 
