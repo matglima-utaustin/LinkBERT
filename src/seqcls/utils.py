@@ -3,6 +3,7 @@ import random
 import string
 from typing import List, Dict
 from dataclasses import dataclass
+from datasets import Dataset
 
 class DatasetCorruptor:
     def __init__(self, dataset):
