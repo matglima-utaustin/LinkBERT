@@ -17,36 +17,28 @@ class DataItem:
 
 class DatasetCorruptor:
     def __init__(self, dataset):
-        self.dataset = [DataItem(**item) for item in dataset]
+        self.dataset = dataset
 
-    def corrupt(self, corruption_type: str) -> List[Dict]:
-        corruption_methods = {
-            'random_question': self._corrupt_question,
-            'random_passage': self._corrupt_passage,
-            'gibberish_passage': self._corrupt_passage_with_gibberish
+    def corrupt(self, method):
+        corruption_method = getattr(self, f'_corrupt_{method}')
+        corrupted_data = [corruption_method(item) for item in self.dataset]
+        return Dataset.from_dict({k: [d[k] for d in corrupted_data] for k in corrupted_data[0].keys()})
+
+    def _corrupt_random_question(self, item):       
+        return {
+            "id": item["id"],
+            "sentence1": random.choice([d.sentence1 for d in self.dataset]),
+            "sentence2": item["sentence2"],
+            "label": item["label"]
         }
-        
-        if corruption_type not in corruption_methods:
-            raise ValueError(f"Invalid corruption type: {corruption_type}")
-        
-        corruption_method = corruption_methods[corruption_type]
-        return [vars(corruption_method(item)) for item in self.dataset]
-
-    def _corrupt_question(self, item: DataItem) -> DataItem:
-        return DataItem(
-            id=item.id,
-            sentence1=random.choice([d.sentence1 for d in self.dataset]),
-            sentence2=item.sentence2,
-            label=item.label
-        )
 
     def _corrupt_passage(self, item: DataItem) -> DataItem:
-        return DataItem(
-            id=item.id,
-            sentence1=item.sentence1,
-            sentence2=random.choice([d.sentence2 for d in self.dataset]),
-            label=item.label
-        )
+        return {
+            "id": item["id"],
+            "sentence1": item["sentence1"],
+            "sentence2": random.choice([d.sentence2 for d in self.dataset]),
+            "label": item["label"]
+        }
 
     def _corrupt_passage_with_gibberish(self, item: DataItem) -> DataItem:
         answer_candidates = self._extract_answer_candidates(item.sentence2)
