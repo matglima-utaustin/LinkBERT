@@ -22,7 +22,7 @@ class DatasetCorruptor:
             "label": item["label"]
         }
 
-    def _corrupt_passage(self, item):
+    def _corrupt_random_passage(self, item):
         return {
             "id": item["id"],
             "sentence1": item["sentence1"],
