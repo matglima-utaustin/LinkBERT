@@ -26,7 +26,7 @@ class DatasetCorruptor:
         return {
             "id": item["id"],
             "sentence1": item["sentence1"],
-            "sentence2": random.choice([d.sentence2 for d in self.dataset]),
+            "sentence2": random.choice([d['sentence2'] for d in self.dataset]),
             "label": item["label"]
         }
 
