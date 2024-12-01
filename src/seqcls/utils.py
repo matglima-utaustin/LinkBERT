@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 @dataclass
 class DataItem:
+    id: str
     sentence1: str  # question
     sentence2: str  # passage
     label: str      # answer
