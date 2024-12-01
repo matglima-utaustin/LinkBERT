@@ -11,7 +11,7 @@ class DataItem:
     label: str      # answer
 
 class DatasetCorruptor:
-    def __init__(self, dataset: List[Dict]):
+    def __init__(self, dataset):
         self.dataset = [DataItem(**item) for item in dataset]
 
     def corrupt(self, corruption_type: str) -> List[Dict]:
