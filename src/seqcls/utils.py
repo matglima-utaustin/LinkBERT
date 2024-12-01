@@ -21,7 +21,7 @@ class DatasetCorruptor:
             "label": item["label"]
         }
 
-    def _corrupt_passage(self, item)
+    def _corrupt_passage(self, item):
         return {
             "id": item["id"],
             "sentence1": item["sentence1"],
@@ -29,7 +29,7 @@ class DatasetCorruptor:
             "label": item["label"]
         }
 
-    def _corrupt_passage_with_gibberish(self, item)
+    def _corrupt_passage_with_gibberish(self, item):
         answer_candidates = self._extract_answer_candidates(item.sentence2)
         gibberish = self._generate_gibberish(len(item.sentence2))
         
