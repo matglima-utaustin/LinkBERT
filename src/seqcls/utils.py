@@ -34,6 +34,7 @@ class DatasetCorruptor:
 
     def _corrupt_question(self, item: DataItem) -> DataItem:
         return DataItem(
+            id=item.id,
             sentence1=random.choice([d.sentence1 for d in self.dataset]),
             sentence2=item.sentence2,
             label=item.label
@@ -41,6 +42,7 @@ class DatasetCorruptor:
 
     def _corrupt_passage(self, item: DataItem) -> DataItem:
         return DataItem(
+            id=item.id,
             sentence1=item.sentence1,
             sentence2=random.choice([d.sentence2 for d in self.dataset]),
             label=item.label
@@ -54,7 +56,7 @@ class DatasetCorruptor:
             insert_position = random.randint(0, len(gibberish))
             gibberish = f"{gibberish[:insert_position]}{candidate}{gibberish[insert_position:]}"
         
-        return DataItem(sentence1=item.sentence1, sentence2=gibberish, label=item.label)
+        return DataItem(id=item.id, sentence1=item.sentence1, sentence2=gibberish, label=item.label)
 
     @staticmethod
     def _extract_answer_candidates(passage: str) -> List[str]:
