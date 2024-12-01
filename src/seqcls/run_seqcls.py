@@ -336,15 +336,15 @@ def main():
     if data_args.corrupt_data:
         ################################## Corrupt data ####################################
         # Create a corruptor instance
-        corruptor = DatasetCorruptor(raw_datasets)
+        corruptor = DatasetCorruptor(raw_datasets["train"])
         
         # Corrupt the dataset in different ways
         if data_args.corruption_type == 'question':
-            raw_datasets = corruptor.corrupt('random_question')
+            raw_datasets["train"] = corruptor.corrupt('random_question')
         elif data_args.corruption_type == 'context':
-            raw_datasets = corruptor.corrupt('random_passage')
+            raw_datasets["train"] = corruptor.corrupt('random_passage')
         elif data_args.corruption_type == 'gibberish_context':
-            raw_datasets = corruptor.corrupt('gibberish_passage')
+            raw_datasets["train"] = corruptor.corrupt('gibberish_passage')
         ####################################################################################
     # Load pretrained model and tokenizer
     #
