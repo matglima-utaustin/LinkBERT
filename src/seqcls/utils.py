@@ -4,17 +4,6 @@ import string
 from typing import List, Dict
 from dataclasses import dataclass
 
-@dataclass
-class DataItem:
-    def __init__(self, id, sentence1, sentence2, label, **kwargs):
-        self.id = id
-        self.sentence1 = sentence1
-        self.sentence2 = sentence2
-        self.label = label
-        # Handle any additional fields
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
 class DatasetCorruptor:
     def __init__(self, dataset):
         self.dataset = dataset
@@ -24,10 +13,10 @@ class DatasetCorruptor:
         corrupted_data = [corruption_method(item) for item in self.dataset]
         return Dataset.from_dict({k: [d[k] for d in corrupted_data] for k in corrupted_data[0].keys()})
 
-    def _corrupt_random_question(self, item):       
+    def _corrupt_random_question(self, item):      
         return {
             "id": item["id"],
-            "sentence1": random.choice([d.sentence1 for d in self.dataset]),
+            "sentence1": random.choice([d['sentence1'] for d in self.dataset]),
             "sentence2": item["sentence2"],
             "label": item["label"]
         }
