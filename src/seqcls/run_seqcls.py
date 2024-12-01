@@ -51,6 +51,7 @@ from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 from trainer_seqcls import SeqClsTrainer
+from utils import DatasetCorruptor
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -139,7 +140,15 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
-    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+    test_file: Optional[str] = field(
+        default=None, metadata={"help": "A csv or a json file containing the test data."}
+    )
+    corrupt_data: bool = field(
+        default=False, metadata={"help": "Whether to corrupt or not the dataset"}
+    )
+    corruption_type: Optional[str] = field(
+        default=None, metadata={"help": "The corruption strategy to choose, wheter to corrupt question, passage or generate gibberish in the passage"}
+    )
 
     def __post_init__(self):
         if self.task_name is not None:
@@ -324,7 +333,19 @@ def main():
             label_list.sort()  # Let's sort it for determinism
             print ('\nlabel_list', label_list)
             num_labels = len(label_list)
-
+    if data_args.corrupt_data:
+        ################################## Corrupt data ####################################
+        # Create a corruptor instance
+        corruptor = DatasetCorruptor(raw_datasets)
+        
+        # Corrupt the dataset in different ways
+        if data_args.corruption_type == 'question':
+            raw_datasets = corruptor.corrupt('random_question')
+        elif data_args.corruption_type == 'context':
+            raw_datasets = corruptor.corrupt('random_passage')
+        elif data_args.corruption_type == 'gibberish_context':
+            raw_datasets = corruptor.corrupt('gibberish_passage')
+        ####################################################################################
     # Load pretrained model and tokenizer
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
