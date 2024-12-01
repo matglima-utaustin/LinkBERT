@@ -6,10 +6,14 @@ from dataclasses import dataclass
 
 @dataclass
 class DataItem:
-    id: str
-    sentence1: str  # question
-    sentence2: str  # passage
-    label: str      # answer
+    def __init__(self, id, sentence1, sentence2, label, **kwargs):
+        self.id = id
+        self.sentence1 = sentence1
+        self.sentence2 = sentence2
+        self.label = label
+        # Handle any additional fields
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 class DatasetCorruptor:
     def __init__(self, dataset):
