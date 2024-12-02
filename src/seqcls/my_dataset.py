@@ -10,6 +10,10 @@ dataset_file = os.getenv('MY_DATASET_FILE', 'default_dataset.json')
 try:
     with open(dataset_file, 'r') as f:
         data = json.load(f)
+except json.JSONDecodeError as e:
+    print(f"Error: The file {dataset_file} is not properly formatted as JSON.")
+    print(f"Details: {e}")
+    exit(1)
 except FileNotFoundError:
     print(f"Error: The file {dataset_file} was not found.")
     exit(1)
