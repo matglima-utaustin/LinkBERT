@@ -65,7 +65,7 @@ train_dataset = load_data(args.train_path)
 eval_dataset = load_data(args.eval_path)
 
 # Load the pre-trained model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained(args.model_name, truncation=True, max_length=512)
+tokenizer = AutoTokenizer.from_pretrained(args.model_name, truncation=True, padding=True, max_length=512)
 model = AutoModelForSequenceClassification.from_pretrained(args.model_name, num_labels=3)
 
 # Wrap the model for TextAttack
