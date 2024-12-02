@@ -30,7 +30,7 @@ def preprocess_function(examples):
 
         result = tokenizer(*args, padding=True, max_length=512, truncation=True)
         # Create label map
-        labels = sorted(set(item[3].lower() for item in examples if label_key in item))
+        labels = examples.unique('label')
         label_map = {label: i for i, label in enumerate(labels)}
         result["label"] = label_map[item[label_key].lower()]
         return result
