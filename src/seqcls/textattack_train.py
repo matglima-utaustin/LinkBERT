@@ -58,7 +58,7 @@ def load_data(dataset_file):
     
     # Create examples
     examples = []
-    examples=preprocess_function(examples)
+    examples=preprocess_function(data)
     
     # Print debug information
     print(f"First few examples: {examples[:2]}")
