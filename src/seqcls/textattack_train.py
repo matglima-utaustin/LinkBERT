@@ -15,21 +15,53 @@ parser.add_argument('--batch_size', type=int, default=8, help='Batch size for tr
 parser.add_argument('--output_dir', type=str, default='./trained_model', help='Output directory for model and logs.')
 args = parser.parse_args()
 
-# Function to load data from JSON file
-def load_data(file_path):
-    with open(file_path, 'r') as f:
-        data = [json.loads(line) for line in f]
-    label_map = {'yes': 0, 'no': 1, 'maybe': 2}
-    dataset = [(example['id'], (example['sentence1'], example['sentence2']), label_map[example['label']]) for example in data]
+# Load tokenizer to get the separator token
+tokenizer = AutoTokenizer.from_pretrained('michiyasunaga/BioLinkBERT-large')
+# Label name
+label_key='label'
+
+def load_data(dataset_file)
+    # Load JSON data
+    data = []
+    try:
+        with open(dataset_file, 'r') as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"JSON decoding error: {e}")
+        print("Attempting to load line by line...")
+        with open(dataset_file, 'r') as f:
+            for idx, line in enumerate(f, 1):
+                line = line.strip()
+                if line:
+                    try:
+                        data.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"Error on line {idx}: {e}")
+                        continue
+    
+    # Create label map
+    labels = sorted(set(item[label_key].lower() for item in data if label_key in item))
+    label_map = {label: i for i, label in enumerate(labels)}
+    
+    # Create examples
+    examples = []
+    for item in data:
+        if label_key in item and 'sentence1' in item and 'sentence2' in item:
+            combined_text = item['sentence1'].strip() + ' ' + tokenizer.sep_token + ' ' + item['sentence2'].strip()
+            label = label_map[item[label_key].lower()]
+            examples.append((combined_text, label))
+        else:
+            print(f"Skipping item: {item}")
+    
+    # Print debug information
+    print(f"First few examples: {examples[:2]}")
+    
+    # Define the dataset variable
+    dataset = Dataset(examples)
     return dataset
-
-# Load training and evaluation data
-train_data = load_data(args.train_path)
-eval_data = load_data(args.eval_path)
-
-# Wrap datasets for TextAttack
-train_dataset = textattack.datasets.Dataset(train_data)
-eval_dataset = textattack.datasets.Dataset(eval_data)
+    
+train_dataset = load_data(args.train_path)
+eval_dataset = load_data(args.eval_path)
 
 # Load the pre-trained model and tokenizer
 tokenizer = AutoTokenizer.from_pretrained(args.model_name, truncation=True, max_length=512)
