@@ -22,6 +22,7 @@ tokenizer = AutoTokenizer.from_pretrained('michiyasunaga/BioLinkBERT-large')
 label_key='label'
 
 def preprocess_function(examples):
+        sentence1_key, sentence2_key = 'sentence1','sentence2'
         # Tokenize the texts
         args = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
