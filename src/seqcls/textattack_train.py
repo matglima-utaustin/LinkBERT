@@ -21,6 +21,19 @@ tokenizer = AutoTokenizer.from_pretrained('michiyasunaga/BioLinkBERT-large')
 # Label name
 label_key='label'
 
+def preprocess_function(examples):
+        # Tokenize the texts
+        args = (
+            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+        )
+
+        result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
+        # Create label map
+        labels = sorted(set(item[label_key].lower() for item in examples if label_key in item))
+        label_map = {label: i for i, label in enumerate(labels)}
+        result["label"] = label_map[item[label_key].lower()]
+        return result
+
 def load_data(dataset_file):
     # Load JSON data
     data = []
@@ -40,19 +53,11 @@ def load_data(dataset_file):
                         print(f"Error on line {idx}: {e}")
                         continue
     
-    # Create label map
-    labels = sorted(set(item[label_key].lower() for item in data if label_key in item))
-    label_map = {label: i for i, label in enumerate(labels)}
+    
     
     # Create examples
     examples = []
-    for item in data:
-        if label_key in item and 'sentence1' in item and 'sentence2' in item:
-            combined_text = item['sentence1'].strip() + ' ' + tokenizer.sep_token + ' ' + item['sentence2'].strip()
-            label = label_map[item[label_key].lower()]
-            examples.append((combined_text, label))
-        else:
-            print(f"Skipping item: {item}")
+    examples=preprocess_function(examples)
     
     # Print debug information
     print(f"First few examples: {examples[:2]}")
