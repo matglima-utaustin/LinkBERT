@@ -43,16 +43,13 @@ attack = textattack.attack_recipes.TextFoolerJin2019.build(model_wrapper)
 
 # Set up Training Arguments
 training_args = textattack.TrainingArgs(
-    num_epochs=args.num_epochs,
-    learning_rate=args.learning_rate,
-    per_device_train_batch_size=args.batch_size,
-    per_device_eval_batch_size=args.batch_size,
-    output_dir=args.output_dir,
-    logging_steps=100,
-    save_steps=500,
-    save_total_limit=2,
-    attack_train=True,  # Use attack during training
-    attack_eval=True    # Use attack during evaluation
+    num_epochs=3,
+    num_clean_epochs=1,
+    num_train_adv_examples=1000,
+    learning_rate=5e-5,
+    per_device_train_batch_size=8,
+    gradient_accumulation_steps=4,
+    log_to_tb=True,
 )
 
 # Create the Trainer and train the model
