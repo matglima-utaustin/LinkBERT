@@ -20,7 +20,7 @@ def load_data(file_path):
     with open(file_path, 'r') as f:
         data = [json.loads(line) for line in f]
     label_map = {'yes': 0, 'no': 1, 'maybe': 2}
-    dataset = [((example['sentence1'], example['sentence2']), label_map[example['label']]) for example in data]
+    dataset = [(example['id'], (example['sentence1'], example['sentence2']), label_map[example['label']]) for example in data]
     return dataset
 
 # Load training and evaluation data
