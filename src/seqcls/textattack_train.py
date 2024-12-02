@@ -48,7 +48,6 @@ training_args = textattack.TrainingArgs(
     per_device_train_batch_size=args.batch_size,
     per_device_eval_batch_size=args.batch_size,
     output_dir=args.output_dir,
-    logging_dir=args.output_dir + '/logs',
     logging_steps=100,
     save_steps=500,
     save_total_limit=2,
