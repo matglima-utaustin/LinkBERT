@@ -20,7 +20,7 @@ tokenizer = AutoTokenizer.from_pretrained('michiyasunaga/BioLinkBERT-large')
 # Label name
 label_key='label'
 
-def load_data(dataset_file)
+def load_data(dataset_file):
     # Load JSON data
     data = []
     try:
