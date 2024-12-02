@@ -28,7 +28,7 @@ def preprocess_function(examples):
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
 
-        result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
+        result = tokenizer(*args, padding=True, max_length=512, truncation=True)
         # Create label map
         labels = sorted(set(item[label_key].lower() for item in examples if label_key in item))
         label_map = {label: i for i, label in enumerate(labels)}
