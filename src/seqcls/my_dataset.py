@@ -2,28 +2,35 @@ import json
 import os
 from textattack.datasets import Dataset
 
-# Define label mapping dynamically
 label_key = os.getenv('LABEL_KEY', 'label')
 dataset_file = os.getenv('MY_DATASET_FILE', 'default_dataset.json')
 
-# Load JSON data
+data = []
+
 try:
     with open(dataset_file, 'r') as f:
         data = json.load(f)
 except json.JSONDecodeError as e:
-    print(f"Error: The file {dataset_file} is not properly formatted as JSON.")
-    print(f"Details: {e}")
-    exit(1)
-except FileNotFoundError:
-    print(f"Error: The file {dataset_file} was not found.")
-    exit(1)
+    print(f"JSON decoding error: {e}")
+    print("Attempting to load line by line...")
+    with open(dataset_file, 'r') as f:
+        for idx, line in enumerate(f, 1):
+            line = line.strip()
+            if line:
+                try:
+                    data.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    print(f"Error on line {idx}: {e}")
+                    continue
 
-# Extract unique labels and create label_map
-labels = sorted(set(item[label_key].lower() for item in data))
+labels = sorted(set(item[label_key].lower() for item in data if label_key in item))
 label_map = {label: i for i, label in enumerate(labels)}
 
-# Create list of examples: [((sentence1, sentence2), label)]
-examples = [((item['sentence1'], item['sentence2']), label_map[item[label_key].lower()]) for item in data]
+examples = []
+for item in data:
+    if label_key in item and 'sentence1' in item and 'sentence2' in item:
+        examples.append(((item['sentence1'], item['sentence2']), label_map[item[label_key].lower()]))
+    else:
+        print(f"Skipping item: {item}")
 
-# Define the dataset variable
 dataset = Dataset(examples)
