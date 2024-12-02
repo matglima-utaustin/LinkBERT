@@ -1,6 +1,7 @@
 import json
 import argparse
 import textattack
+from textattack.datasets import Dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from textattack.models.wrappers import HuggingFaceModelWrapper
 
