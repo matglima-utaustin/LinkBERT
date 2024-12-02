@@ -32,7 +32,7 @@ def preprocess_function(examples):
         # Create label map
         labels = ['yes','no']
         label_map = {label: i for i, label in enumerate(labels)}
-        result["label"] = label_map[item[label_key].lower()]
+        result["label"] = label_map[examples[label_key].lower()]
         return result
 
 def load_data(dataset_file):
